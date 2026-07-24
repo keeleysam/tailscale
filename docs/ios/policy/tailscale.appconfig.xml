@@ -1,0 +1,672 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<managedAppConfiguration>
+  <version>1</version>
+  <bundleId>io.tailscale.ipn.ios</bundleId>
+  <dict>
+    <string keyName="AdvertiseExitNode">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>always</value>
+          <value>never</value>
+          <value>user-decides</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="AllowIncomingConnections">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>always</value>
+          <value>never</value>
+          <value>user-decides</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="AuthKey">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="CheckUpdates">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>always</value>
+          <value>never</value>
+          <value>user-decides</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="DeviceSerialNumber">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="ExitNodeAllowLANAccess">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>always</value>
+          <value>never</value>
+          <value>user-decides</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="ExitNodeID">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="ExitNodeIP">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="ExitNodesPicker">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>show</value>
+          <value>hide</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="Hostname">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="InstallUpdates">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>always</value>
+          <value>never</value>
+          <value>user-decides</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="KeyExpirationNotice">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="LogTarget">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="LoginURL">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="ManagedByCaption">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="ManagedByOrganizationName">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="ManagedByURL">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="PostureChecking">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>always</value>
+          <value>never</value>
+          <value>user-decides</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="ReconnectAfter">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="SuggestedExitNode">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>show</value>
+          <value>hide</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="Tailnet">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+    </string>
+    <string keyName="UnattendedMode">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>always</value>
+          <value>never</value>
+          <value>user-decides</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="UpdateMenu">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>show</value>
+          <value>hide</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="UseTailscaleDNSSettings">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>always</value>
+          <value>never</value>
+          <value>user-decides</value>
+        </values>
+      </constraint>
+    </string>
+    <string keyName="UseTailscaleSubnets">
+      <defaultValue>
+        <value></value>
+      </defaultValue>
+      <constraint>
+        <values>
+          <value></value>
+          <value>always</value>
+          <value>never</value>
+          <value>user-decides</value>
+        </values>
+      </constraint>
+    </string>
+    <stringArray keyName="AllowedSuggestedExitNodes"></stringArray>
+    <boolean keyName="AllowTailscaledRestart">
+      <defaultValue>
+        <value>false</value>
+      </defaultValue>
+    </boolean>
+    <boolean keyName="AlwaysOn.Enabled">
+      <defaultValue>
+        <value>false</value>
+      </defaultValue>
+    </boolean>
+    <boolean keyName="AlwaysOn.OverrideWithReason">
+      <defaultValue>
+        <value>false</value>
+      </defaultValue>
+    </boolean>
+    <boolean keyName="ExitNode.AllowOverride">
+      <defaultValue>
+        <value>false</value>
+      </defaultValue>
+    </boolean>
+  </dict>
+  <presentation defaultLocale="en">
+    <fieldGroup>
+      <name>
+        <language value="en">Configure the auto-update settings</language>
+      </name>
+      <field keyName="CheckUpdates" type="select">
+        <label>
+          <language value="en">Automatically check for updates</language>
+        </label>
+        <description>
+          <language value="en">Control whether the Tailscale client periodically checks for updates. See https://tailscale.com/docs/features/client/update for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="always">
+            <language value="en">Always</language>
+          </option>
+          <option value="never">
+            <language value="en">Never</language>
+          </option>
+          <option value="user-decides">
+            <language value="en">User decides</language>
+          </option>
+        </options>
+      </field>
+      <field keyName="InstallUpdates" type="select">
+        <label>
+          <language value="en">Automatically install updates</language>
+        </label>
+        <description>
+          <language value="en">Control whether updates are automatically installed once downloaded. See https://tailscale.com/kb/1067/update#auto-updates for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="always">
+            <language value="en">Always</language>
+          </option>
+          <option value="never">
+            <language value="en">Never</language>
+          </option>
+          <option value="user-decides">
+            <language value="en">User decides</language>
+          </option>
+        </options>
+      </field>
+    </fieldGroup>
+    <fieldGroup>
+      <name>
+        <language value="en">Configure the exit node settings</language>
+      </name>
+      <field keyName="AdvertiseExitNode" type="select">
+        <label>
+          <language value="en">Run Tailscale as an exit node</language>
+        </label>
+        <description>
+          <language value="en">Control whether the device advertises itself as an exit node. The device must still be approved by a tailnet administrator before it can be used as one. See https://tailscale.com/kb/1103/exit-nodes for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="always">
+            <language value="en">Always</language>
+          </option>
+          <option value="never">
+            <language value="en">Never</language>
+          </option>
+          <option value="user-decides">
+            <language value="en">User decides</language>
+          </option>
+        </options>
+      </field>
+      <field keyName="AllowedSuggestedExitNodes" type="list">
+        <label>
+          <language value="en">Allowed suggested exit nodes</language>
+        </label>
+        <description>
+          <language value="en">Restrict, by device ID, which exit nodes Tailscale may automatically select and enforce as the suggested exit node when a forced exit node is set to &#34;auto:any&#34;. The suggested exit node is shown in the GUI and CLI. If left empty, all available exit nodes may be suggested. See https://tailscale.com/kb/1315/mdm-keys#suggest-allowed-forced-exit-nodes and https://tailscale.com/kb/1103/exit-nodes for details.</language>
+        </description>
+      </field>
+      <field keyName="ExitNode.AllowOverride" type="checkbox">
+        <label>
+          <language value="en">Allow exit node override</language>
+        </label>
+        <description>
+          <language value="en">Allow the user to override exit node policy settings and manually select a different exit node, without allowing them to disable exit node usage entirely. Typically used together with a forced exit node set to &#34;auto:any&#34;.</language>
+        </description>
+      </field>
+      <field keyName="ExitNodeAllowLANAccess" type="select">
+        <label>
+          <language value="en">Allow LAN access while using an exit node</language>
+        </label>
+        <description>
+          <language value="en">Control whether the device can still reach the local network while using an exit node. See https://tailscale.com/kb/1315/mdm-keys#toggle-local-network-access-when-an-exit-node-is-in-use and https://tailscale.com/kb/1103/exit-nodes#step-4-use-the-exit-node for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="always">
+            <language value="en">Always</language>
+          </option>
+          <option value="never">
+            <language value="en">Never</language>
+          </option>
+          <option value="user-decides">
+            <language value="en">User decides</language>
+          </option>
+        </options>
+      </field>
+      <field keyName="ExitNodeID" type="input">
+        <label>
+          <language value="en">Forced exit node</language>
+        </label>
+        <description>
+          <language value="en">Force the client to always use the given exit node. Set to an exit node&#39;s ID, visible on the Machines page of the admin console or via the Tailscale API, or to &#34;auto:any&#34; to let Tailscale automatically select the most suitable exit node. If the specified exit node becomes unavailable, the device has no internet access unless Tailscale is disconnected. Leave unset to let the user choose an exit node themselves, if one is available and permitted by ACLs. See https://tailscale.com/kb/1315/mdm-keys#force-an-exit-node-to-always-be-used and https://tailscale.com/kb/1103/exit-nodes for details.</language>
+        </description>
+      </field>
+      <field keyName="ExitNodeIP" type="input">
+        <label>
+          <language value="en">Forced exit node (by IP)</language>
+        </label>
+        <description>
+          <language value="en">Force the client to always use the exit node with the given IP address. Prefer the exit node ID where possible; it takes precedence if both are set.</language>
+        </description>
+      </field>
+    </fieldGroup>
+    <fieldGroup>
+      <name>
+        <language value="en">Show contact information for your organization</language>
+      </name>
+      <field keyName="ManagedByCaption" type="input">
+        <label>
+          <language value="en">Managed-by caption</language>
+        </label>
+        <description>
+          <language value="en">Support caption text shown alongside the managed-by organization name.</language>
+        </description>
+      </field>
+      <field keyName="ManagedByOrganizationName" type="input">
+        <label>
+          <language value="en">Managed-by organization name</language>
+        </label>
+        <description>
+          <language value="en">Name of the organization managing this device, shown in the client as &#34;Managed By {Organization}&#34;.</language>
+        </description>
+      </field>
+      <field keyName="ManagedByURL" type="input">
+        <label>
+          <language value="en">Managed-by support URL</language>
+        </label>
+        <description>
+          <language value="en">URL to a help desk or support resource for users in the organization, shown in the client.</language>
+        </description>
+      </field>
+    </fieldGroup>
+    <fieldGroup>
+      <name>
+        <language value="en">Other settings</language>
+      </name>
+      <field keyName="AllowIncomingConnections" type="select">
+        <label>
+          <language value="en">Allow incoming connections</language>
+        </label>
+        <description>
+          <language value="en">Control whether the device accepts incoming connections from other tailnet devices. See https://tailscale.com/kb/1315/mdm-keys#set-whether-to-allow-incoming-connections and https://tailscale.com/kb/1072/client-preferences#allow-incoming-connections for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="always">
+            <language value="en">Always</language>
+          </option>
+          <option value="never">
+            <language value="en">Never</language>
+          </option>
+          <option value="user-decides">
+            <language value="en">User decides</language>
+          </option>
+        </options>
+      </field>
+      <field keyName="AllowTailscaledRestart" type="checkbox">
+        <label>
+          <language value="en">Allow users to restart tailscaled</language>
+        </label>
+        <description>
+          <language value="en">Control whether users are allowed to fully reset the connection by restarting tailscaled. This can be useful for troubleshooting certain connectivity issues.</language>
+        </description>
+      </field>
+      <field keyName="AlwaysOn.Enabled" type="checkbox">
+        <label>
+          <language value="en">Always On</language>
+        </label>
+        <description>
+          <language value="en">Prevent the user from disconnecting from the tailnet or exiting the client. Often combined with unattended mode to keep the device connected regardless of whether a user is logged in, useful for remote access or for ensuring connectivity to internal infrastructure before a user logs in.</language>
+        </description>
+      </field>
+      <field keyName="AlwaysOn.OverrideWithReason" type="checkbox">
+        <label>
+          <language value="en">Require reason to override Always On</language>
+        </label>
+        <description>
+          <language value="en">When Always On is enabled, require the user to submit a reason to override and disconnect.</language>
+        </description>
+      </field>
+      <field keyName="AuthKey" type="input">
+        <label>
+          <language value="en">Auth key</language>
+        </label>
+        <description>
+          <language value="en">Auth key used to authenticate this device without user interaction, for unattended registration, unless the device is already logged in or a different auth key is specified via the CLI. Delivering secrets through policy mechanisms carries real risk: policy values are often readable by other users and applications on the device, and a leaked auth key can be used to gain or elevate access to the tailnet. Only use this after reviewing your organization&#39;s security posture: scope the auth key to a specific tag with tight ACLs, prefer short-lived or one-time keys, and consider Device Approval and Tailnet Lock to reduce risk. Revoke the auth key immediately if it may have been compromised. See https://tailscale.com/kb/1315/mdm-keys#set-an-auth-key for details.</language>
+        </description>
+      </field>
+      <field keyName="DeviceSerialNumber" type="input">
+        <label>
+          <language value="en">Device serial number</language>
+        </label>
+        <description>
+          <language value="en">Provide the device&#39;s serial number. Mobile platforms (Android, iOS, tvOS) cannot read their own serial number due to sandboxing, so MDM must supply it here for serial-based device attribution.</language>
+        </description>
+      </field>
+      <field keyName="Hostname" type="input">
+        <label>
+          <language value="en">Hostname override</language>
+        </label>
+        <description>
+          <language value="en">Override the hostname reported to the coordination server, instead of using the device&#39;s OS-configured hostname.</language>
+        </description>
+      </field>
+      <field keyName="KeyExpirationNotice" type="input">
+        <label>
+          <language value="en">Key expiration notice</language>
+        </label>
+        <description>
+          <language value="en">How long before node key expiry to show the user a notice. Uses Go duration format, e.g. &#34;24h&#34; or &#34;5h25m30s&#34;. Defaults to 24 hours if left unset. See https://tailscale.com/kb/1315/mdm-keys#set-the-key-expiration-notice-period for details.</language>
+        </description>
+      </field>
+      <field keyName="LogTarget" type="input">
+        <label>
+          <language value="en">Log server URL</language>
+        </label>
+        <description>
+          <language value="en">Require using a specific, non-standard log server. Using a non-standard log server limits Tailscale Support&#39;s ability to diagnose problems.</language>
+        </description>
+      </field>
+      <field keyName="LoginURL" type="input">
+        <label>
+          <language value="en">Coordination server URL</language>
+        </label>
+        <description>
+          <language value="en">Require using a specific Tailscale coordination server. Set to the URL of the coordination server, beginning with https:// and no trailing slash. If left blank, the default Tailscale coordination server is used. See https://tailscale.com/kb/1315/mdm-keys#set-a-custom-control-server-url for details.</language>
+        </description>
+      </field>
+      <field keyName="PostureChecking" type="select">
+        <label>
+          <language value="en">Posture checking</language>
+        </label>
+        <description>
+          <language value="en">Control whether the client gathers device posture data for posture-based access rules. See https://tailscale.com/kb/1315/mdm-keys#enable-gathering-device-posture-data and https://tailscale.com/kb/1326/device-identity for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="always">
+            <language value="en">Always</language>
+          </option>
+          <option value="never">
+            <language value="en">Never</language>
+          </option>
+          <option value="user-decides">
+            <language value="en">User decides</language>
+          </option>
+        </options>
+      </field>
+      <field keyName="ReconnectAfter" type="input">
+        <label>
+          <language value="en">Automatic reconnect delay</language>
+        </label>
+        <description>
+          <language value="en">How long Tailscale waits before automatically reconnecting after a user disconnects it. Specify as a Go duration (e.g. 30s, 5m, 1h30m). Leave blank or zero to disable automatic reconnection. See https://pkg.go.dev/time#ParseDuration for details.</language>
+        </description>
+      </field>
+      <field keyName="Tailnet" type="input">
+        <label>
+          <language value="en">Suggested or required tailnet</language>
+        </label>
+        <description>
+          <language value="en">Suggest or require a specific tailnet at login. Provide the tailnet name, as shown in the top-left of the admin console (e.g. &#34;example.com&#34;), or prefix it with &#34;required:&#34; to require it rather than merely suggest it. When suggested rather than required, that tailnet&#39;s SSO button is shown prominently on the login page, alongside the option to choose a different tailnet. See https://tailscale.com/kb/1315/mdm-keys#set-a-suggested-or-required-tailnet for details.</language>
+        </description>
+      </field>
+      <field keyName="UnattendedMode" type="select">
+        <label>
+          <language value="en">Run Tailscale in unattended mode</language>
+        </label>
+        <description>
+          <language value="en">Control whether Tailscale keeps running and connected without requiring a user to be logged in. See https://tailscale.com/kb/1315/mdm-keys#set-unattended-mode and https://tailscale.com/kb/1088/run-unattended for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="always">
+            <language value="en">Always</language>
+          </option>
+          <option value="never">
+            <language value="en">Never</language>
+          </option>
+          <option value="user-decides">
+            <language value="en">User decides</language>
+          </option>
+        </options>
+      </field>
+      <field keyName="UseTailscaleDNSSettings" type="select">
+        <label>
+          <language value="en">Use Tailscale DNS settings</language>
+        </label>
+        <description>
+          <language value="en">Control whether Tailscale applies its DNS configuration while the tunnel is connected. See https://tailscale.com/kb/1315/mdm-keys#set-whether-the-device-uses-tailscale-dns-settings for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="always">
+            <language value="en">Always</language>
+          </option>
+          <option value="never">
+            <language value="en">Never</language>
+          </option>
+          <option value="user-decides">
+            <language value="en">User decides</language>
+          </option>
+        </options>
+      </field>
+      <field keyName="UseTailscaleSubnets" type="select">
+        <label>
+          <language value="en">Use Tailscale subnets</language>
+        </label>
+        <description>
+          <language value="en">Control whether the client accepts subnet routes advertised by other nodes in the tailnet. See https://tailscale.com/kb/1315/mdm-keys#set-whether-the-device-accepts-tailscale-subnets and https://tailscale.com/kb/1019/subnets for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="always">
+            <language value="en">Always</language>
+          </option>
+          <option value="never">
+            <language value="en">Never</language>
+          </option>
+          <option value="user-decides">
+            <language value="en">User decides</language>
+          </option>
+        </options>
+      </field>
+    </fieldGroup>
+    <fieldGroup>
+      <name>
+        <language value="en">Change the visibility of UI items</language>
+      </name>
+      <field keyName="ExitNodesPicker" type="select">
+        <label>
+          <language value="en">Show exit node picker</language>
+        </label>
+        <description>
+          <language value="en">Show or hide the exit node picker UI in the Tailscale client. This doesn&#39;t affect selecting or stopping exit node usage via the CLI. See https://tailscale.com/kb/1315/mdm-keys#hide-the-exit-node-picker for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="show">
+            <language value="en">Show</language>
+          </option>
+          <option value="hide">
+            <language value="en">Hide</language>
+          </option>
+        </options>
+      </field>
+      <field keyName="SuggestedExitNode" type="select">
+        <label>
+          <language value="en">Show suggested exit nodes</language>
+        </label>
+        <description>
+          <language value="en">Control the visibility of automatic exit node suggestions. When hidden, no exit node suggestion is presented to the user in the exit node picker.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="show">
+            <language value="en">Show</language>
+          </option>
+          <option value="hide">
+            <language value="en">Hide</language>
+          </option>
+        </options>
+      </field>
+      <field keyName="UpdateMenu" type="select">
+        <label>
+          <language value="en">Show update notification</language>
+        </label>
+        <description>
+          <language value="en">Show or hide the update-available notification in the client. See https://tailscale.com/kb/1315/mdm-keys#hide-the-update-menu for details.</language>
+        </description>
+        <options>
+          <option value="" selected="true">
+            <language value="en">Not configured</language>
+          </option>
+          <option value="show">
+            <language value="en">Show</language>
+          </option>
+          <option value="hide">
+            <language value="en">Hide</language>
+          </option>
+        </options>
+      </field>
+    </fieldGroup>
+  </presentation>
+</managedAppConfiguration>

@@ -89,9 +89,9 @@ func (v *ResolverView) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 //     This is the common format as sent by the control plane.
 //   - An IP:port, for tests.
 //   - "https://resolver.com/path" for DNS over HTTPS. Well-known public
-//     providers (see the publicdns package) are dialed at their known IPs;
-//     arbitrary providers require BootstrapResolution below, or an
-//     IP-literal URL host.
+//     providers (see the publicdns package) are dialed at their known IPs,
+//     and others at BootstrapResolution below or an IP-literal URL host if
+//     present. Otherwise, clients look the host up themselves.
 //   - "http://node-address:port/path" for DNS over HTTP over WireGuard. This
 //     is implemented in the PeerAPI for exit nodes and app connectors.
 //   - [TODO] "tls://resolver.com" for DNS over TCP+TLS
@@ -101,9 +101,8 @@ func (v ResolverView) Addr() string { return v.ж.Addr }
 // DoT/DoH resolver, if the resolver URL does not reference an IP
 // address directly.
 // BootstrapResolution may be empty, in which case clients should
-// look up the DoT/DoH server using their local "classic" DNS
-// resolver, or only use the resolver if its addresses are already
-// known (as for well-known public providers).
+// look up the DoT/DoH server themselves, without asking that same
+// server.
 func (v ResolverView) BootstrapResolution() views.Slice[netip.Addr] {
 	return views.SliceOf(v.ж.BootstrapResolution)
 }

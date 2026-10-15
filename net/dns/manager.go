@@ -90,8 +90,9 @@ type Manager struct {
 	mu                  sync.Mutex // guards following
 	config              *Config    // Tracks the last viable DNS configuration set by Set.  nil on failures other than compilation failures or if set has never been called.
 	queryResponseMapper ResponseMapper
-	waitingForBaseCfg   bool // a retry goroutine is waiting for OS upstream resolvers
-	managerCacheFlush        // platform-specific state, guarded by mu
+	waitingForBaseCfg   bool   // a retry goroutine is waiting for OS upstream resolvers
+	dohBaseErr          string // last error dohBootstrapResolvers logged, so a repeated failure is logged once
+	managerCacheFlush          // platform-specific state, guarded by mu
 }
 
 // NewManager created a new manager from the given config.
@@ -396,6 +397,7 @@ func (m *Manager) compileConfig(cfg Config) (rcfg resolver.Config, ocfg OSConfig
 		// through quad-100.
 		rcfg.Routes = routes
 		rcfg.Routes["."] = cfg.DefaultResolvers
+		rcfg.DoHBootstrapResolvers = m.dohBootstrapResolvers(rcfg.Routes)
 		ocfg.Nameservers = cfg.serviceIPs(m.knobs)
 		return rcfg, ocfg, nil
 	}
@@ -455,6 +457,7 @@ func (m *Manager) compileConfig(cfg Config) (rcfg resolver.Config, ocfg OSConfig
 	// queries to quad-100 can be forwarded to the underlying resolver.
 	if supportsSplitDNS && !isIOS && (!isSandboxedApple || scopeApple) {
 		ocfg.MatchDomains = cfg.matchDomains()
+		rcfg.DoHBootstrapResolvers = m.dohBootstrapResolvers(rcfg.Routes)
 		return rcfg, ocfg, nil
 	}
 
@@ -555,6 +558,26 @@ func underlyingResolvers(base OSConfig) []*dnstype.Resolver {
 		out = append(out, &dnstype.Resolver{Addr: ip.String()})
 	}
 	return out
+}
+
+// dohBootstrapResolvers returns resolver.Config.DoHBootstrapResolvers: the OS's resolvers, if routes has a resolver that [resolver.NeedsDoHBootstrap]. compileConfig calls it where "." does not already forward to them. Failing to read them is not fatal, as the name may be in MagicDNS.
+func (m *Manager) dohBootstrapResolvers(routes map[dnsname.FQDN][]*dnstype.Resolver) []*dnstype.Resolver {
+	for _, rs := range routes {
+		if !slices.ContainsFunc(rs, resolver.NeedsDoHBootstrap) {
+			continue
+		}
+		base, err := m.os.GetBaseConfig()
+		if err != nil {
+			if msg := err.Error(); msg != m.dohBaseErr {
+				m.dohBaseErr = msg
+				m.logf("dns: cannot read OS resolvers to look up DoH server hostnames: %v", err)
+			}
+			return nil
+		}
+		m.dohBaseErr = ""
+		return underlyingResolvers(base)
+	}
+	return nil
 }
 
 func (m *Manager) disableSplitDNSOptimization() bool {

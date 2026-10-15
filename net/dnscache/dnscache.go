@@ -124,6 +124,9 @@ type Resolver struct {
 	// to use if Forward returns an error or no results.
 	LookupIPFallback func(ctx context.Context, host string) ([]netip.Addr, error)
 
+	// Lookup, if non-nil, looks hosts up instead of Forward and the cloud host resolver, for callers that pick their own resolvers.
+	Lookup func(ctx context.Context, host string) ([]netip.Addr, error)
+
 	// TTL is how long to keep entries cached
 	//
 	// If zero, a default (currently 10 minutes) is used.
@@ -361,6 +364,8 @@ func (r *Resolver) lookupIP(ctx context.Context, host string) (ip, ip6 netip.Add
 	src := srcForward
 	if r.LookupIPForTest != nil && testenv.InTest() {
 		ips, err = r.LookupIPForTest(ctx, host)
+	} else if r.Lookup != nil {
+		ips, err = r.Lookup(lookupCtx, host)
 	} else {
 		ips, err = r.fwd().LookupNetIP(lookupCtx, "ip", host)
 		if err != nil || len(ips) == 0 {

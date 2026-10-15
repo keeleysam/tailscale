@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math/rand/v2"
 	"net"
 	"net/http"
 	"net/netip"
@@ -37,6 +38,7 @@ import (
 	"tailscale.com/net/netmon"
 	"tailscale.com/net/netx"
 	"tailscale.com/net/sockstats"
+	"tailscale.com/net/tsaddr"
 	"tailscale.com/net/tsdial"
 	"tailscale.com/syncs"
 	"tailscale.com/types/dnstype"
@@ -319,6 +321,9 @@ type forwarder struct {
 
 	controlKnobs *controlknobs.Knobs // or nil
 
+	// resolveLocal, if non-nil, is [Resolver.resolveLocal]. It is set once, before the forwarder is used.
+	resolveLocal func(dnsname.FQDN, dns.Type) (netip.Addr, dns.RCode)
+
 	ctx       context.Context    // good until Close
 	ctxCancel context.CancelFunc // closes ctx
 
@@ -329,6 +334,8 @@ type forwarder struct {
 	// routes are per-suffix resolvers to use, with
 	// the most specific routes first.
 	routes []route
+	// dohBootstrap is Config.DoHBootstrapResolvers.
+	dohBootstrap []resolverAndDelay
 	// cloudHostFallback are last resort resolvers to use if no per-suffix
 	// resolver matches. These are only populated on cloud hosts where the
 	// platform provides a well-known recursive resolver.
@@ -515,6 +522,14 @@ func (f *forwarder) setRoutes(routesBySuffix map[dnsname.FQDN][]*dnstype.Resolve
 	f.cloudHostFallback = cloudHostFallback
 }
 
+// setDoHBootstrapResolvers sets the resolvers in Config.DoHBootstrapResolvers.
+func (f *forwarder) setDoHBootstrapResolvers(rs []*dnstype.Resolver) {
+	bootstrap := resolversWithDelays(rs)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.dohBootstrap = bootstrap
+}
+
 var stdNetPacketListener nettype.PacketListenerWithNetIP = nettype.MakePacketListenerWithNetIP(new(net.ListenConfig))
 
 func (f *forwarder) packetListener(ip netip.Addr) (nettype.PacketListenerWithNetIP, error) {
@@ -551,12 +566,11 @@ func (f *forwarder) getKnownDoHClientForProvider(urlBase string) (c *http.Client
 }
 
 // getDoHClientForResolver returns an HTTP client for the DoH server described
-// by r. Known public providers ([publicdns.DoHIPsOfBase]) work as before. For
-// arbitrary providers — typically enterprise resolvers recovered from the
-// OS's base configuration — the resolver must either carry a
-// BootstrapResolution, or its URL host must be an IP literal (which needs no
-// bootstrap): we cannot resolve the DoH server's own name through DNS without
-// recursing through ourselves.
+// by r, or false if r.Addr does not parse as a URL. Known public providers
+// ([publicdns.DoHIPsOfBase]) are dialed at their well-known IPs. Arbitrary
+// providers are dialed at their BootstrapResolution addresses when present,
+// or at the URL's own host when that is an IP literal. Otherwise the host is
+// looked up at dial time; see [forwarder.lookupDoHHost].
 func (f *forwarder) getDoHClientForResolver(r *dnstype.Resolver) (c *http.Client, ok bool) {
 	urlBase := r.Addr
 	f.mu.Lock()
@@ -576,11 +590,10 @@ func (f *forwarder) getDoHClientForResolver(r *dnstype.Resolver) (c *http.Client
 			if err != nil {
 				return nil, false
 			}
-			ip, err := netip.ParseAddr(u.Hostname())
-			if err != nil {
-				return nil, false
+			// Otherwise leave allIPs empty to look the host up at dial time.
+			if ip, err := netip.ParseAddr(u.Hostname()); err == nil {
+				allIPs = []netip.Addr{ip}
 			}
-			allIPs = []netip.Addr{ip}
 		}
 	}
 	return f.newDoHClientLocked(key, urlBase, allIPs)
@@ -601,18 +614,24 @@ func dohClientCacheKey(urlBase string, bootstrap []netip.Addr) string {
 
 // newDoHClientLocked builds a DoH HTTP client that dials urlBase's host at
 // the given IPs, caching the client under cacheKey (which differs from
-// urlBase when bootstrap results vary). f.mu must be held.
+// urlBase when bootstrap results vary). If allIPs is empty, the host is looked
+// up at dial time by [forwarder.lookupDoHHost]. f.mu must be held.
 func (f *forwarder) newDoHClientLocked(cacheKey, urlBase string, allIPs []netip.Addr) (c *http.Client, ok bool) {
 	dohURL, err := url.Parse(urlBase)
 	if err != nil {
 		return nil, false
 	}
 
-	dialer := dnscache.Dialer(f.getDialerType(), &dnscache.Resolver{
-		SingleHost:             dohURL.Hostname(),
-		SingleHostStaticResult: allIPs,
-		Logf:                   f.logf,
-	})
+	var dialer netx.DialFunc
+	if len(allIPs) > 0 {
+		dialer = dnscache.Dialer(f.getDialerType(), &dnscache.Resolver{
+			SingleHost:             dohURL.Hostname(),
+			SingleHostStaticResult: allIPs,
+			Logf:                   f.logf,
+		})
+	} else {
+		dialer = f.newDoHHostDialer(dohURL.Hostname())
+	}
 	tlsConfig := &tls.Config{
 		// Enforce TLS 1.3, as all of our supported DNS-over-HTTPS servers are compatible with it
 		// (see tailscale.com/net/dns/publicdns/publicdns.go).
@@ -640,6 +659,260 @@ func (f *forwarder) newDoHClientLocked(cacheKey, urlBase string, allIPs []netip.
 	}
 	f.dohClient[cacheKey] = c
 	return c, true
+}
+
+// NeedsDoHBootstrap reports whether r is a DoH resolver whose hostname must be looked up before it can be dialed: not a publicdns provider, no BootstrapResolution, and no IP-literal URL host.
+func NeedsDoHBootstrap(r *dnstype.Resolver) bool {
+	if r == nil || !strings.HasPrefix(r.Addr, "https://") ||
+		len(r.BootstrapResolution) > 0 || len(publicdns.DoHIPsOfBase(r.Addr)) > 0 {
+		return false
+	}
+	u, err := url.Parse(r.Addr)
+	if err != nil {
+		return false
+	}
+	_, err = netip.ParseAddr(u.Hostname())
+	return err != nil
+}
+
+// newDoHHostDialer returns a dial function for the DoH server host, whose addresses are not known ahead of time. dnscache looks host up with lookupDoHHost, shares one lookup among concurrent dials, reuses it for its TTL, looks again after a dial to cached addresses fails, and keeps the last addresses while new lookups fail.
+func (f *forwarder) newDoHHostDialer(host string) netx.DialFunc {
+	return dnscache.Dialer(f.dialDoHHost, &dnscache.Resolver{
+		Lookup:      f.lookupDoHHost,
+		UseLastGood: true,
+		Logf:        f.logf,
+	})
+}
+
+// dialDoHHost dials addr, an address dnscache found for a DoH server. Tailscale addresses, such as a MagicDNS name's, are dialed through the tailnet.
+func (f *forwarder) dialDoHHost(ctx context.Context, netw, addr string) (net.Conn, error) {
+	if ap, err := netip.ParseAddrPort(addr); err == nil && tsaddr.IsTailscaleIP(ap.Addr()) {
+		return f.dialer.UserDial(ctx, netw, addr)
+	}
+	return f.getDialerType()(ctx, netw, addr)
+}
+
+// lookupDoHHost looks up host, a DoH server's name, without sending the lookup to that same server. Failures are counted in metricDNSFwdDoHHostLookupError.
+//
+// Names that quad-100 is authoritative for are never sent anywhere else. Names that no route matches go to the OS resolver, which then does not send them to quad-100 either. Others go to the resolvers from dohLookupResolvers.
+func (f *forwarder) lookupDoHHost(ctx context.Context, host string) ([]netip.Addr, error) {
+	ips, err := f.lookupDoHHostAddrs(ctx, host)
+	if err != nil {
+		metricDNSFwdDoHHostLookupError.Add(1)
+		return nil, fmt.Errorf("looking up DoH server %q: %w", host, err)
+	}
+	return ips, nil
+}
+
+func (f *forwarder) lookupDoHHostAddrs(ctx context.Context, host string) ([]netip.Addr, error) {
+	fqdn, err := dnsname.ToFQDN(host)
+	if err != nil {
+		return nil, err
+	}
+	if f.resolveLocal != nil {
+		if ips, ok, err := f.localDoHHostAddrs(fqdn); ok {
+			return ips, err
+		}
+	}
+	rs, routed := f.dohLookupResolvers(fqdn)
+	switch {
+	case !routed:
+		// Whenever quad-100 is the OS's primary resolver, Manager.compileConfig installs a "." route, which every name matches. So an unrouted name is one the OS does not send to quad-100, and the OS resolver cannot loop back here.
+		return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	case len(rs) == 0:
+		return nil, errors.New("no nameserver can look it up without querying this DoH server")
+	}
+	return f.lookupVia(ctx, fqdn, rs)
+}
+
+// localDoHHostAddrs looks fqdn up in quad-100's own records, A and AAAA separately so that a dual-stack name keeps both. ok is false if quad-100 is not authoritative for fqdn.
+func (f *forwarder) localDoHHostAddrs(fqdn dnsname.FQDN) (ips []netip.Addr, ok bool, err error) {
+	for _, typ := range []dns.Type{dns.TypeA, dns.TypeAAAA} {
+		ip, rcode := f.resolveLocal(fqdn, typ)
+		switch rcode {
+		case dns.RCodeRefused:
+			return nil, false, nil
+		case dns.RCodeSuccess:
+			if ip.IsValid() {
+				ips = append(ips, ip)
+			}
+		default:
+			return nil, true, fmt.Errorf("MagicDNS lookup: %v", rcode)
+		}
+	}
+	if len(ips) == 0 {
+		return nil, true, errors.New("no addresses in MagicDNS")
+	}
+	return ips, true, nil
+}
+
+// dohLookupResolvers returns the resolvers through which to look up domain, a DoH server's name, and whether any route matches domain.
+//
+// It tries matching routes from most to least specific, as when a DoH server is named under the split domain it serves, then Config.DoHBootstrapResolvers. If routed is true but no resolvers are returned, domain cannot be looked up without recursing.
+func (f *forwarder) dohLookupResolvers(domain dnsname.FQDN) (_ []resolverAndDelay, routed bool) {
+	f.mu.Lock()
+	routes := f.routes
+	bootstrap := f.dohBootstrap
+	cloudHostFallback := f.cloudHostFallback
+	schemes := f.schemeCacheLocked()
+	f.mu.Unlock()
+
+	for _, route := range routes {
+		if route.Suffix != "." && !route.Suffix.Contains(domain) {
+			continue
+		}
+		routed = true
+		if rs := dohLookupCandidates(applySchemes(f.logf, route.Resolvers, schemes)); len(rs) > 0 {
+			return rs, true
+		}
+	}
+	if !routed {
+		return nil, false
+	}
+	if rs := dohLookupCandidates(bootstrap); len(rs) > 0 {
+		return rs, true
+	}
+	return dohLookupCandidates(cloudHostFallback), true
+}
+
+// dohLookupCandidates returns the resolvers in rs that need no hostname lookup of their own, so that lookups never recurse, leaving out quad-100, which an OS's base configuration can list.
+func dohLookupCandidates(rs []resolverAndDelay) []resolverAndDelay {
+	var out []resolverAndDelay
+	for _, rr := range rs {
+		if NeedsDoHBootstrap(rr.name) || strings.HasPrefix(rr.name.Addr, "tls://") {
+			continue
+		}
+		if ipp, ok := rr.name.IPPort(); ok {
+			if ip := ipp.Addr(); ip == tsaddr.TailscaleServiceIP() || ip == tsaddr.TailscaleServiceIPv6() {
+				continue
+			}
+		}
+		out = append(out, rr)
+	}
+	return out
+}
+
+// dohLookupTimeout bounds each lookup by lookupVia.
+const dohLookupTimeout = 5 * time.Second
+
+// lookupVia looks up fqdn's A and AAAA records by querying rs directly. Unlike forwardWithDestChan, it leaves forwarder health alone, as no client asked quad-100 for fqdn.
+func (f *forwarder) lookupVia(ctx context.Context, fqdn dnsname.FQDN, rs []resolverAndDelay) ([]netip.Addr, error) {
+	ctx, cancel := context.WithTimeout(ctx, dohLookupTimeout)
+	defer cancel()
+	var ips []netip.Addr
+	var errs []error
+	for _, typ := range []dns.Type{dns.TypeA, dns.TypeAAAA} {
+		got, err := f.lookupTypeVia(ctx, fqdn, typ, rs)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		ips = append(ips, got...)
+	}
+	if len(ips) > 0 {
+		return ips, nil
+	}
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
+	}
+	return nil, errors.New("no addresses")
+}
+
+// lookupTypeVia races a query for fqdn's records of type typ across rs, as forwardWithDestChan does, and returns the addresses in the first successful response.
+func (f *forwarder) lookupTypeVia(ctx context.Context, fqdn dnsname.FQDN, typ dns.Type, rs []resolverAndDelay) ([]netip.Addr, error) {
+	query, err := addrQuery(fqdn, typ)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	fq := &forwardQuery{
+		txid:           getTxID(query),
+		packet:         query,
+		family:         "udp",
+		closeOnCtxDone: new(closePool),
+	}
+	defer func() {
+		// As in forwardWithDestChan, cancel must run before the close.
+		cancel()
+		fq.closeOnCtxDone.Close()
+	}()
+
+	type result struct {
+		res []byte
+		err error
+	}
+	resc := make(chan result, len(rs))
+	for _, rr := range rs {
+		go func() {
+			if rr.startDelay > 0 {
+				timer := time.NewTimer(rr.startDelay)
+				select {
+				case <-timer.C:
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				}
+			}
+			res, err := f.send(ctx, fq, rr)
+			var bs []byte
+			if res != nil {
+				bs = res.Bs
+			}
+			resc <- result{bs, err}
+		}()
+	}
+	var errs []error
+	for range rs {
+		select {
+		case r := <-resc:
+			if r.err == nil {
+				return answerAddrs(r.res)
+			}
+			errs = append(errs, r.err)
+		case <-ctx.Done():
+			// Returning closes closeOnCtxDone, which unblocks the sends still waiting for a reply.
+			return nil, errors.Join(append(errs, ctx.Err())...)
+		}
+	}
+	return nil, errors.Join(errs...)
+}
+
+// addrQuery returns a recursive DNS query for fqdn's records of type typ.
+func addrQuery(fqdn dnsname.FQDN, typ dns.Type) ([]byte, error) {
+	name, err := dns.NewName(fqdn.WithTrailingDot())
+	if err != nil {
+		return nil, err
+	}
+	var opt dns.ResourceHeader
+	if err := opt.SetEDNS0(maxResponseBytes, dns.RCodeSuccess, false); err != nil {
+		return nil, err
+	}
+	msg := dns.Message{
+		Header:      dns.Header{ID: uint16(rand.Uint32()), RecursionDesired: true},
+		Questions:   []dns.Question{{Name: name, Type: typ, Class: dns.ClassINET}},
+		Additionals: []dns.Resource{{Header: opt, Body: &dns.OPTResource{}}},
+	}
+	return msg.Pack()
+}
+
+// answerAddrs returns the A and AAAA records in the DNS response res.
+func answerAddrs(res []byte) ([]netip.Addr, error) {
+	var msg dns.Message
+	if err := msg.Unpack(res); err != nil {
+		return nil, err
+	}
+	if msg.RCode != dns.RCodeSuccess {
+		return nil, fmt.Errorf("lookup failed: %v", msg.RCode)
+	}
+	var ips []netip.Addr
+	for _, rr := range msg.Answers {
+		switch body := rr.Body.(type) {
+		case *dns.AResource:
+			ips = append(ips, netip.AddrFrom4(body.A))
+		case *dns.AAAAResource:
+			ips = append(ips, netip.AddrFrom16(body.AAAA))
+		}
+	}
+	return ips, nil
 }
 
 const dohType = "application/dns-message"
@@ -730,12 +1003,7 @@ func (f *forwarder) send(ctx context.Context, fq *forwardQuery, rr resolverAndDe
 		return res, nil
 	}
 	if strings.HasPrefix(rr.name.Addr, "https://") {
-		// Known DoH providers (see tailscale.com/net/dns/publicdns) are dialed
-		// at their well-known IPs. Arbitrary providers — typically enterprise
-		// resolvers recovered from the OS's base DNS configuration — are only
-		// usable when the resolver carries a bootstrap resolution, or when the
-		// URL's host is an IP literal, since we cannot resolve the DoH
-		// server's own name through DNS without recursing through ourselves.
+		// See getDoHClientForResolver for how the DoH server's address is found.
 		if hc, ok := f.getDoHClientForResolver(rr.name); ok {
 			res, err := f.sendDoH(ctx, rr.name.Addr, hc, fq.packet)
 			if err != nil {
@@ -746,7 +1014,7 @@ func (f *forwarder) send(ctx context.Context, fq *forwardQuery, rr resolverAndDe
 			return res, nil
 		}
 		metricDNSFwdErrorType.Add(1)
-		return nil, fmt.Errorf("cannot dial https:// resolver %q: no known IPs or bootstrap resolution", rr.name.Addr)
+		return nil, fmt.Errorf("invalid https:// resolver URL %q", rr.name.Addr)
 	}
 	if strings.HasPrefix(rr.name.Addr, "tls://") {
 		metricDNSFwdErrorType.Add(1)

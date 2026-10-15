@@ -636,3 +636,38 @@ func TestDialerRefreshesStaleCache(t *testing.T) {
 	reachable = nil
 	check("unreachable", true, 3, ipB)
 }
+
+// Lookup replaces Forward, its results are cached, and with UseLastGood the last of them outlive a failed refresh.
+func TestLookup(t *testing.T) {
+	want := netip.MustParseAddr("192.0.2.7")
+	var calls int
+	fail := false
+	r := &Resolver{
+		Forward: &net.Resolver{PreferGo: true, Dial: func(context.Context, string, string) (net.Conn, error) {
+			t.Error("Forward used despite Lookup")
+			return nil, errors.New("unused")
+		}},
+		Lookup: func(ctx context.Context, host string) ([]netip.Addr, error) {
+			calls++
+			if fail {
+				return nil, errors.New("lookup failed")
+			}
+			return []netip.Addr{want}, nil
+		},
+		UseLastGood: true,
+	}
+	for range 2 {
+		ip, _, _, err := r.LookupIP(t.Context(), "doh.example.com")
+		if err != nil || ip != want {
+			t.Fatalf("LookupIP = %v, %v; want %v", ip, err, want)
+		}
+	}
+	if calls != 1 {
+		t.Errorf("Lookup called %d times; want 1, then cached", calls)
+	}
+	r.expireIPCache("doh.example.com")
+	fail = true
+	if ip, _, _, err := r.LookupIP(t.Context(), "doh.example.com"); err != nil || ip != want {
+		t.Errorf("after a failed refresh, LookupIP = %v, %v; want the last good %v", ip, err, want)
+	}
+}

@@ -97,6 +97,8 @@ type Config struct {
 	// Queries only match the most specific suffix.
 	// To register a "default route", add an entry for ".".
 	Routes map[dnsname.FQDN][]*dnstype.Resolver
+	// DoHBootstrapResolvers are the OS's own resolvers, used to look up DoH server names (see [NeedsDoHBootstrap]) that no matching route can, as for a DoH global nameserver.
+	DoHBootstrapResolvers []*dnstype.Resolver
 	// LocalHosts is a map of FQDNs to corresponding IPs.
 	Hosts map[dnsname.FQDN][]netip.Addr
 	// LocalDomains is a list of DNS name suffixes that should not be
@@ -115,6 +117,10 @@ type Config struct {
 func (c *Config) WriteToBufioWriter(w *bufio.Writer) {
 	w.WriteString("{Routes:")
 	WriteRoutes(w, c.Routes)
+	if len(c.DoHBootstrapResolvers) > 0 {
+		w.WriteString(" DoHBootstrap:")
+		WriteDNSResolvers(w, c.DoHBootstrapResolvers)
+	}
 	fmt.Fprintf(w, " Hosts:%v LocalDomains:[", len(c.Hosts))
 	space := false
 	arpa := 0
@@ -349,6 +355,7 @@ func New(logf logger.Logf, linkSel ForwardLinkSelector, dialer *tsdial.Dialer, h
 		health:   health,
 	}
 	r.forwarder = newForwarder(r.logf, netMon, linkSel, dialer, health, knobs)
+	r.forwarder.resolveLocal = r.resolveLocal
 	return r
 }
 
@@ -381,6 +388,7 @@ func (r *Resolver) SetConfig(cfg Config) error {
 	}
 
 	r.forwarder.setRoutes(cfg.Routes, cfg.AcceptDNS)
+	r.forwarder.setDoHBootstrapResolvers(cfg.DoHBootstrapResolvers)
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -1595,7 +1603,9 @@ var (
 	metricDNSFwdErrorContextGotError = clientmetric.NewCounter("dns_query_fwd_error_context_got_error")
 
 	metricDNSFwdErrorType = clientmetric.NewCounter("dns_query_fwd_error_type")
-	metricDNSFwdTruncated = clientmetric.NewCounter("dns_query_fwd_truncated")
+	// metricDNSFwdDoHHostLookupError counts failed lookups of DoH server names that have no known addresses.
+	metricDNSFwdDoHHostLookupError = clientmetric.NewCounter("dns_query_fwd_doh_host_lookup_error")
+	metricDNSFwdTruncated          = clientmetric.NewCounter("dns_query_fwd_truncated")
 
 	metricDNSFwdUDP             = clientmetric.NewCounter("dns_query_fwd_udp")       // on entry
 	metricDNSFwdUDPWrote        = clientmetric.NewCounter("dns_query_fwd_udp_wrote") // sent UDP packet

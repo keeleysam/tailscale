@@ -8,12 +8,15 @@ import (
 	"context"
 	"flag"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"slices"
 	"sync/atomic"
 	"testing"
 
+	miekdns "github.com/miekg/dns"
 	"golang.org/x/net/dns/dnsmessage"
 	"tailscale.com/health"
 	"tailscale.com/net/dns/publicdns"
@@ -21,6 +24,7 @@ import (
 	"tailscale.com/net/tsdial"
 	"tailscale.com/tstest"
 	"tailscale.com/types/dnstype"
+	"tailscale.com/util/dnsname"
 	"tailscale.com/util/eventbus/eventbustest"
 	"tailscale.com/util/httpm"
 )
@@ -123,12 +127,14 @@ func TestGetDoHClientForResolver(t *testing.T) {
 		t.Fatal("known provider without bootstrap not ok")
 	}
 
-	// Arbitrary providers with a hostname require a bootstrap resolution: we
-	// cannot resolve the DoH server's own name without recursing through
-	// ourselves.
+	// Arbitrary providers with a hostname and no bootstrap resolution get a
+	// client that looks the hostname up at dial time.
 	arbitrary := "https://doh.corp.example/query"
-	if _, ok := fwd.getDoHClientForResolver(&dnstype.Resolver{Addr: arbitrary}); ok {
-		t.Fatal("arbitrary provider without bootstrap unexpectedly ok")
+	if _, ok := fwd.getDoHClientForResolver(&dnstype.Resolver{Addr: arbitrary}); !ok {
+		t.Fatal("arbitrary provider without bootstrap not ok")
+	}
+	if _, ok := fwd.getDoHClientForResolver(&dnstype.Resolver{Addr: "https://[invalid/query"}); ok {
+		t.Fatal("unparseable DoH URL unexpectedly ok")
 	}
 
 	// A URL whose host is an IP literal dials itself; no bootstrap resolution
@@ -209,12 +215,6 @@ func TestSendArbitraryDoHWithBootstrap(t *testing.T) {
 	bootstrap := []netip.Addr{netip.MustParseAddr("127.0.0.1")}
 	r := &dnstype.Resolver{Addr: urlBase, BootstrapResolution: bootstrap}
 
-	// A URL with a *hostname* host still requires a bootstrap resolution:
-	// send would refuse it rather than silently fall back.
-	if _, ok := fwd.getDoHClientForResolver(&dnstype.Resolver{Addr: "https://doh.corp.example/query"}); ok {
-		t.Fatal("client built for hostname URL without bootstrap resolution")
-	}
-
 	// Inject the test server's client at the cache key send() computes for
 	// this resolver; the httptest client accepts the local certificate.
 	fwd.mu.Lock()
@@ -234,4 +234,152 @@ func TestSendArbitraryDoHWithBootstrap(t *testing.T) {
 	if got := gotRequests.Load(); got != 1 {
 		t.Errorf("saw %d requests; want 1", got)
 	}
+}
+
+func TestDoHLookupResolvers(t *testing.T) {
+	const doh = "https://doh.corp.example/q"
+	tests := []struct {
+		name       string
+		routes     map[dnsname.FQDN][]*dnstype.Resolver
+		bootstrap  []*dnstype.Resolver
+		wantRouted bool
+		want       []string // resolver Addrs
+	}{
+		{
+			// The OS does not send unrouted names to quad-100, so the OS resolver can look them up.
+			name:   "unrouted",
+			routes: map[dnsname.FQDN][]*dnstype.Resolver{"other.example.": {{Addr: doh}}},
+		},
+		{
+			// Resolvers that need a lookup of their own, and quad-100, are skipped.
+			name:       "route-has-other-resolver",
+			routes:     map[dnsname.FQDN][]*dnstype.Resolver{".": {{Addr: doh}, {Addr: "https://doh2.corp.example/q"}, {Addr: "100.100.100.100"}, {Addr: "192.0.2.53"}}},
+			wantRouted: true,
+			want:       []string{"192.0.2.53"},
+		},
+		{
+			name:       "global-doh",
+			routes:     map[dnsname.FQDN][]*dnstype.Resolver{".": {{Addr: doh}}},
+			wantRouted: true,
+		},
+		{
+			// A DoH global nameserver uses the OS's resolvers.
+			name:       "global-doh-uses-bootstrap",
+			routes:     map[dnsname.FQDN][]*dnstype.Resolver{".": {{Addr: doh}}},
+			bootstrap:  []*dnstype.Resolver{{Addr: "100.100.100.100"}, {Addr: "192.0.2.1"}},
+			wantRouted: true,
+			want:       []string{"192.0.2.1"},
+		},
+		{
+			// The DoH server's name is under the split domain that it serves, so the lookup falls through to the "." route.
+			name:       "under-own-split-route",
+			routes:     map[dnsname.FQDN][]*dnstype.Resolver{"corp.example.": {{Addr: doh}}, ".": {{Addr: "192.0.2.53"}}},
+			bootstrap:  []*dnstype.Resolver{{Addr: "192.0.2.1"}},
+			wantRouted: true,
+			want:       []string{"192.0.2.53"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fwd := newTestForwarder(t, nil)
+			fwd.setRoutes(tt.routes, true)
+			fwd.setDoHBootstrapResolvers(tt.bootstrap)
+			rs, routed := fwd.dohLookupResolvers("doh.corp.example.")
+			if routed != tt.wantRouted {
+				t.Errorf("routed = %v; want %v", routed, tt.wantRouted)
+			}
+			var got []string
+			for _, rr := range rs {
+				got = append(got, rr.name.Addr)
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("resolvers = %q; want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDoHHostDialer(t *testing.T) {
+	loopback := netip.MustParseAddr("127.0.0.1")
+
+	// Dials to ln complete without an Accept, which is all these tests need.
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	_, port, _ := net.SplitHostPort(ln.Addr().String())
+	closed, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed.Close()
+	_, closedPort, _ := net.SplitHostPort(closed.Addr().String())
+
+	var queries atomic.Int32
+	server := serveDNS(t, "127.0.0.1:0", ".", miekdns.HandlerFunc(func(w miekdns.ResponseWriter, req *miekdns.Msg) {
+		queries.Add(1)
+		dnsHandler(loopback)(w, req)
+	}))
+	defer server.Shutdown()
+	nameserver := server.PacketConn.LocalAddr().String()
+
+	t.Run("forwarded", func(t *testing.T) {
+		queries.Store(0)
+		fwd := newTestForwarder(t, nil)
+		fwd.setRoutes(map[dnsname.FQDN][]*dnstype.Resolver{".": {{Addr: "https://doh.example.com/dns-query"}, {Addr: nameserver}}}, true)
+		dial := fwd.newDoHHostDialer("doh.example.com")
+		mustDial := func(wantQueries int32) {
+			t.Helper()
+			c, err := dial(t.Context(), "tcp", "doh.example.com:"+port)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.Close()
+			if got := queries.Load(); got != wantQueries {
+				t.Errorf("nameserver got %d queries; want %d", got, wantQueries)
+			}
+		}
+		failDial := func() {
+			t.Helper()
+			if c, err := dial(t.Context(), "tcp", "doh.example.com:"+closedPort); err == nil {
+				c.Close()
+				t.Fatal("dial to a closed port succeeded")
+			}
+		}
+
+		mustDial(2) // one query each for A and AAAA
+		mustDial(2) // reused
+		failDial()
+		mustDial(4) // looked up again after the failed dial
+
+		// With no way to look the name up, the last addresses are used.
+		fwd.setRoutes(map[dnsname.FQDN][]*dnstype.Resolver{".": {{Addr: "https://doh.example.com/dns-query"}}}, true)
+		failDial()
+		mustDial(4)
+	})
+
+	t.Run("magicdns", func(t *testing.T) {
+		queries.Store(0)
+		r := newResolver(t)
+		defer r.Close()
+		r.SetConfig(Config{
+			Routes:       map[dnsname.FQDN][]*dnstype.Resolver{".": {{Addr: "https://doh.tail-net.ts.net/dns-query"}, {Addr: nameserver}}},
+			Hosts:        map[dnsname.FQDN][]netip.Addr{"doh.tail-net.ts.net.": {loopback}},
+			LocalDomains: []dnsname.FQDN{"tail-net.ts.net."},
+		})
+		for host, wantOK := range map[string]bool{"doh.tail-net.ts.net": true, "missing.tail-net.ts.net": false} {
+			c, err := r.forwarder.newDoHHostDialer(host)(t.Context(), "tcp", net.JoinHostPort(host, port))
+			if (err == nil) != wantOK {
+				t.Errorf("dialing %s: err = %v; want ok %v", host, err, wantOK)
+			}
+			if c != nil {
+				c.Close()
+			}
+		}
+		// quad-100 is authoritative for tail-net.ts.net, so even names that it does not know are not asked of anyone else.
+		if got := queries.Load(); got != 0 {
+			t.Errorf("nameserver got %d queries; want 0", got)
+		}
+	})
 }

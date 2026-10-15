@@ -494,6 +494,44 @@ func TestManager(t *testing.T) {
 			},
 		},
 		{
+			// A DoH global nameserver named by hostname needs the OS's resolvers to look that hostname up.
+			name: "global-doh-hostname",
+			in: Config{
+				DefaultResolvers: mustRes("https://doh.corp.com/dns-query"),
+			},
+			bs: OSConfig{
+				Nameservers: mustIPs("8.8.8.8"),
+			},
+			os: OSConfig{
+				Nameservers: serviceAddr46,
+			},
+			rs: resolver.Config{
+				Routes:                upstreams(".", "https://doh.corp.com/dns-query"),
+				DoHBootstrapResolvers: mustRes("8.8.8.8"),
+			},
+		},
+		{
+			// As above, for a DoH split resolver whose hostname is under the split domain it serves.
+			name: "routes-split-doh-hostname",
+			in: Config{
+				Routes:        upstreams("corp.com", "https://doh.corp.com/dns-query"),
+				SearchDomains: fqdns("tailscale.com", "universe.tf"),
+			},
+			split: true,
+			bs: OSConfig{
+				Nameservers: mustIPs("8.8.8.8"),
+			},
+			os: OSConfig{
+				Nameservers:   serviceAddr46,
+				SearchDomains: fqdns("tailscale.com", "universe.tf"),
+				MatchDomains:  fqdns("corp.com"),
+			},
+			rs: resolver.Config{
+				Routes:                upstreams("corp.com.", "https://doh.corp.com/dns-query"),
+				DoHBootstrapResolvers: mustRes("8.8.8.8"),
+			},
+		},
+		{
 			// A custom split resolver requires Mode B even with macOS scoping
 			// enabled: otherwise the split suffix becomes a global search suffix.
 			name: "routes-split-sandboxed-darwin",

@@ -45,6 +45,7 @@ import (
 	"tailscale.com/net/tsaddr"
 	"tailscale.com/net/tsdial"
 	"tailscale.com/net/tstun"
+	"tailscale.com/net/via64"
 	"tailscale.com/proxymap"
 	"tailscale.com/syncs"
 	"tailscale.com/tailcfg"
@@ -236,6 +237,9 @@ type Impl struct {
 	lb        *ipnlocal.LocalBackend // or nil
 	dns       *dns.Manager
 
+	// via64Reasm reassembles fragmented UDP to via addresses the kernel translates (see reassembleForVia64).
+	via64Reasm via64.Reassembler
+
 	// Before Start is called, there can IPv6 Neighbor Discovery from the
 	// OS landing on netstack. We need to drop those packets until Start.
 	ready atomic.Bool // set to true once Start has been called
@@ -370,6 +374,7 @@ func Create(logf logger.Logf, tundev *tstun.Wrapper, e wgengine.Engine, mc *magi
 	ns := &Impl{
 		logf:                  logf,
 		tundev:                tundev,
+		via64Reasm:            via64.Reassembler{Headroom: tstun.WritePacketStartOffset},
 		e:                     e,
 		pm:                    pm,
 		mc:                    mc,
@@ -1364,7 +1369,14 @@ func (ns *Impl) shouldProcessInbound(p *packet.Parsed, t *tstun.Wrapper) bool {
 		return false
 	}
 	if p.IPVersion == 6 && !isLocal && viaRange.Contains(dstIP) {
-		return ns.lb != nil && ns.lb.ShouldHandleViaIP(dstIP)
+		if ns.lb == nil || !ns.lb.ShouldHandleViaIP(dstIP) {
+			return false
+		}
+		// Leave the packet to the kernel if it translates this prefix (net/via64). Targets 4via6 may not reach stay here and are refused.
+		if via64.KernelHandles(dstIP, p.IPProto) && ns.lb.ShouldForwardToVia(dstIP) {
+			return false
+		}
+		return true
 	}
 	if ns.ProcessLocalIPs && isLocal {
 		return true
@@ -1492,6 +1504,9 @@ func (ns *Impl) injectInbound(p *packet.Parsed, t *tstun.Wrapper, gro *gro.GRO) 
 	}
 
 	if !ns.shouldProcessInbound(p, t) {
+		if ns.reassembleForVia64(p, t) {
+			return filter.DropSilently, gro
+		}
 		// Let the host network stack (if any) deal with it.
 		return filter.Accept, gro
 	}
@@ -1528,6 +1543,31 @@ func (ns *Impl) injectInbound(p *packet.Parsed, t *tstun.Wrapper, gro *gro.GRO) 
 	// instead return filter.DropSilently which just quietly stops
 	// processing it in the tstun TUN wrapper.
 	return filter.DropSilently, gro
+}
+
+/*
+reassembleForVia64 reports whether it took p, an IPv6 fragment of a UDP datagram to a via address the kernel translates (via64.KernelReassembles). It reassembles the datagram, runs the packet filter on it as on any whole packet, and hands it to the kernel whole, so that the IPv4 host gets one datagram, as through netstack, instead of IPv4 fragments.
+
+The packet filter has already passed p: the first fragment on its ports, later fragments unconditionally. So the filter decides again on the whole datagram, and a datagram whose first fragment it dropped never completes.
+*/
+func (ns *Impl) reassembleForVia64(p *packet.Parsed, t *tstun.Wrapper) bool {
+	if p.IPVersion != 6 || !viaRange.Contains(p.Dst.Addr()) || !via64.KernelReassembles(p.Buffer()) {
+		return false
+	}
+	buf := ns.via64Reasm.Add(p.Buffer())
+	if buf == nil {
+		return true
+	}
+	var q packet.Parsed
+	q.Decode(buf[tstun.WritePacketStartOffset:])
+	if t.FilterInbound(&q) != filter.Accept {
+		via64.CountReasmFiltered()
+		return true
+	}
+	if err := t.InjectInboundDirect(buf, tstun.WritePacketStartOffset); err != nil {
+		via64.CountReasmError()
+	}
+	return true
 }
 
 // metricViaHostScopedDrop counts refused 4via6 forwards to host-scoped targets.

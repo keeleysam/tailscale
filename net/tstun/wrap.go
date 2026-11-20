@@ -1341,6 +1341,18 @@ func (t *Wrapper) tdevWrite(flow int, buffs [][]byte, offset int) (int, error) {
 	return t.writeTo(flow, buffs, offset)
 }
 
+// FilterInbound runs the inbound packet filter on p, the jailed filter if p is from a jailed peer, as for a packet from WireGuard. It is for packets a hook makes from ones it consumed, such as via64's reassembled datagrams, which it then injects with InjectInboundDirect.
+func (t *Wrapper) FilterInbound(p *packet.Parsed) filter.Response {
+	filt := t.filter.Load()
+	if t.peerConfig.Load().inboundPacketIsJailed(p) {
+		filt = t.jailedFilter.Load()
+	}
+	if filt == nil {
+		return filter.Drop
+	}
+	return filt.RunIn(p, t.filterFlags)
+}
+
 func (t *Wrapper) GetFilter() *filter.Filter {
 	return t.filter.Load()
 }

@@ -45,6 +45,10 @@ func isProblematicInterface(nif *net.Interface) bool {
 	// "WireGuard tunnel 0" as well on Windows (NetBird), but the name seems too
 	// generic where there is not a platform standard (on Linux wt0 is at least
 	// explicitly different from the WireGuard conventional default of wg0).
+	// via64's netkit pair (net/via64/xlat) carries 192.0.0.6, a translator-internal address; advertised as an endpoint, peers' disco pings to it loop through the translator and are dropped.
+	if name == "tsvia0" || name == "tsvia1" {
+		return true
+	}
 	if strings.HasPrefix(name, "zt") || name == "wt0" /* NetBird */ ||
 		(runtime.GOOS == "windows" && strings.Contains(name, "ZeroTier")) {
 		return true
